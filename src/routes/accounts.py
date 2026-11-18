@@ -51,27 +51,32 @@ async def register_user(
         user_data: UserRegistrationRequestSchema,
         db: AsyncSession = Depends(get_db),
 ):
-    existing_user = await db.scalar(
-        select(UserModel).where(UserModel.email == user_data.email.lower())
-    )
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"A user with this email {user_data.email} already exists.",
-        )
-
-    group = await db.scalar(
-        select(UserGroupModel).where(
-            UserGroupModel.name == UserGroupEnum.USER
-        )
-    )
-    if group is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="An error occurred during user creation.",
-        )
-
     try:
+        existing_user = await db.scalar(
+            select(UserModel).where(
+                UserModel.email == user_data.email.lower()
+            )
+        )
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"A user with this email {user_data.email} "
+                    f"already exists."
+                ),
+            )
+
+        group = await db.scalar(
+            select(UserGroupModel).where(
+                UserGroupModel.name == UserGroupEnum.USER
+            )
+        )
+        if group is None:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An error occurred during user creation.",
+            )
+
         user = UserModel.create(
             email=user_data.email,
             raw_password=user_data.password,
@@ -272,9 +277,12 @@ async def refresh_access_token(
             status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)
         )
 
+    user_id = payload.get("user_id")
+
     token_record = await db.scalar(
         select(RefreshTokenModel).where(
-            RefreshTokenModel.token == data.refresh_token
+            RefreshTokenModel.token == data.refresh_token,
+            RefreshTokenModel.user_id == user_id,
         )
     )
     if token_record is None:
@@ -283,7 +291,7 @@ async def refresh_access_token(
             detail="Refresh token not found.",
         )
 
-    user = await db.get(UserModel, payload.get("user_id"))
+    user = await db.get(UserModel, user_id)
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
